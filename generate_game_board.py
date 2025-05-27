@@ -1,67 +1,56 @@
 import numpy as np
 from _generate_completed_board import generate_completed_board
+from check_unique import check_unique
+from numba import njit
 
-def check_unique(board: np.array, position: tuple) -> bool:
-    (n, m) = board.shape
-    assert n == m, "Board must be square."
-    bad_board = board.copy()
-    (x,y) = position
-    true_color = bad_board[x,y]
-    if true_color == 0:
-        # do not bother trying to drop an already-empty position
-        return False
-    assert true_color in {1,2}, "Sanity check failed, grid not 0/1/2 valued."
-    new_color = 3-true_color
-    bad_board[x,y] = new_color
-    # test for two new color instances in a row
-    three_in_a_row_pattern = str(new_color)*3
-    if ''.join(map(str,bad_board[x,:])).count(three_in_a_row_pattern):
-        # Made unique by virtue of leading to 3-in-a-row otherwise
-        return True
-    if ''.join(map(str,bad_board[:,y])).count(three_in_a_row_pattern):
-        return True
-    rows_set = list(range(n))
-    # Check too many new_color or duplicate row
-    row_to_check = bad_board[x,:]
-    bit_mask = (row_to_check == new_color)
-    number_of_new_color = int(np.sum(bit_mask))
-    if number_of_new_color > n/2:
-        # leads to excess new color
-        return True
-    elif number_of_new_color == n/2:
-        other_rows = rows_set[:x] + rows_set[(x + 1):]
-        for i in other_rows:
-            spots_to_check = bad_board[i,bit_mask]
-            if np.array_equiv(spots_to_check, new_color):
-                # Another row also has full spots of the new color
-                return True
-    # Check duplicate columns
-    row_to_check = bad_board[:,y]
-    bit_mask = (row_to_check == new_color)
-    number_of_new_color = int(np.sum(bit_mask))
-    if number_of_new_color > n/2:
-        # leads to excess new color
-        return True
-    elif number_of_new_color == n/2:
-        other_rows = rows_set[:y] + rows_set[(y + 1):]
-        for i in other_rows:
-            spots_to_check = bad_board[bit_mask, i]
-            if np.array_equiv(spots_to_check, new_color):
-                # Another row also has full spots of the new color
-                return True
-    return False
-
+@njit
 def create_emptier_board(partial_board: np.array) -> np.array:
-    candidate_positions = np.random.permutation(
-        np.vstack(np.nonzero(partial_board)).T)
-    candidate_positions = candidate_positions.astype(int).tolist()
-    candidate_positions = list(map(tuple, candidate_positions))
-    while len(candidate_positions) > 0:
-        (x,y)  = candidate_positions.pop()
-        if check_unique(partial_board, (x,y)):
+    """
+    Recursively removes cells from a completed or partially filled game board
+    to create a puzzle, ensuring that each removal step maintains a state
+    where the removed cell's original value was "forced" (i.e., flipping it
+    would violate game rules, checked by `check_unique`).
+
+    The function tries to empty cells one by one from a shuffled list of
+    candidates. If emptying a cell (via `check_unique` returning True for its
+    position) is valid, it recursively calls itself with the emptier board.
+    If no more cells can be emptied according to this rule, the board state
+    is returned.
+
+    Args:
+        partial_board (np.array): A NumPy array representing the current
+                                  state of the game board. This could be a
+                                  fully solved board or one from which some
+                                  cells have already been removed.
+
+    Returns:
+        np.array: A NumPy array representing the board with some cells emptied,
+                  forming a puzzle that should (ideally) have a unique solution
+                  based on the "forced move" heuristic.
+    """
+    # Refactored candidate positions generation for Numba compatibility
+    # np.argwhere returns a 2D array (N, 2) where N is number of non-zero elements
+    coords = np.argwhere(partial_board != 0)
+    
+    # np.random.shuffle shuffles the array in-place along the first axis.
+    # This is Numba-compatible.
+    if coords.shape[0] == 0: # No non-zero elements to remove
+        return partial_board
+    np.random.shuffle(coords)
+
+    for i in range(coords.shape[0]):
+        x, y = coords[i, 0], coords[i, 1]
+        
+        # Pass coordinates as a tuple to check_unique, as it expects.
+        # Numba can handle creating small tuples.
+        position_tuple = (x, y)
+        
+        if check_unique(partial_board, position_tuple): # check_unique is already JITted
             new_board = partial_board.copy()
             new_board[x,y] = 0
+            # Recursive call to a JITted function is fine.
             return create_emptier_board(new_board)
+            
     return partial_board
 
 def generate_game_board(n: int) -> np.array:
