@@ -70,8 +70,7 @@ def check_unique(board: np.array, position: tuple) -> bool:
            bad_board[i+1, y] == new_color and \
            bad_board[i+2, y] == new_color:
             return True # Made unique by leading to 3-in-a-row
-            
-    rows_set = list(range(n)) # This will become a list of integers, Numba can handle this.
+
     # Check too many new_color or duplicate row for the affected row bad_board[x,:]
     current_row_slice = bad_board[x,:]
     num_new_color_in_row = 0

@@ -3,30 +3,34 @@ from typing import List # For type hints
 import functools # For @functools.cache
 import itertools # For itertools.combinations
 from numba import njit
-# Removed: import numba (for numba.objmode)
+
 
 @njit # has_three_in_row remains JITted
-def has_three_in_row(arr_input: np.ndarray) -> bool:
+def vec_has_three_in_row(arr_input: np.ndarray) -> bool:
     """
     Check if array contains three consecutive identical non-zero values.
-    Handles 1D array (checks along its length) or 
+    Handles 1D array (checks along its length)
+    """
+    if len(arr_input) < 3:
+        return False
+    for i in range(len(arr_input) - 2):
+        val = arr_input[i]
+        if val != 0 and val == arr_input[i+1] and val == arr_input[i+2]:
+            return True
+    return False
+
+@njit # has_three_in_row remains JITted
+def is_there_a_column_of_three_same(arr_input: np.ndarray) -> bool:
+    """
     2D array (checks each row, assuming rows are the segments to check, e.g., column segments of length 3).
     arr_input is expected to be np.int64
     """
-    if arr_input.ndim == 1:
-        if len(arr_input) < 3:
-            return False
-        for i in range(len(arr_input) - 2):
-            val = arr_input[i]
-            if val != 0 and val == arr_input[i+1] and val == arr_input[i+2]:
-                return True
-    elif arr_input.ndim == 2: 
-        for i in range(arr_input.shape[0]): 
-            if arr_input.shape[1] != 3: 
-                continue 
-            val = arr_input[i, 0]
-            if val != 0 and val == arr_input[i, 1] and val == arr_input[i, 2]:
-                return True
+    for i in range(arr_input.shape[1]):
+        if arr_input.shape[0] != 3:
+            continue
+        val = arr_input[0, i]
+        if val != 0 and val == arr_input[1, i] and val == arr_input[2, i]:
+            return True
     return False
 
 # --- Reverted Combination Generation & valid_rows to Pure Python ---
@@ -57,23 +61,21 @@ def generate_valid_rows(n: int) -> List[np.ndarray]:
     valid_rows: List[np.ndarray] = []
     
     if n % 2 != 0: # Original assert implies n must be even
-        # Or raise ValueError("n must be a multiple of 2")
-        return valid_rows # Return empty list for consistency if n is odd
+        raise ValueError("n must be a multiple of 2")
+        # return valid_rows # Return empty list for consistency if n is odd
 
     half_n = n // 2
-    blank_row_bool = np.zeros(n, dtype=bool)
+    blank_row_template = np.ones(n, dtype=np.uint8)
 
     # Use itertools.combinations as in the original pure Python version
     for ones_pos in itertools.combinations(range(n), half_n):
-        row_bool = blank_row_bool.copy()
-        # ones_pos is a tuple of indices, convert to list for assignment if necessary,
-        # though direct tuple indexing might also work for advanced indexing.
-        # Using list() for safety as per original.
-        row_bool[list(ones_pos)] = True
+        candidate_row = blank_row_template.copy()
+        # ones_pos is a tuple of indices, convert to list for assignment
+        candidate_row[list(ones_pos)] = 2
         
         # has_three_in_row expects an int array
-        if not has_three_in_row(row_bool.astype(np.int64)): 
-            valid_rows.append(row_bool.astype(np.int64)) # Store as int64 arrays
+        if not vec_has_three_in_row(candidate_row):
+            valid_rows.append(candidate_row) # Store as uint8 arrays
             
     return valid_rows
 
@@ -126,7 +128,7 @@ def solve(grid: np.ndarray, valid_rows: List[np.ndarray],
         # Check 3-in-a-row for columns if enough rows are placed
         if n_accomplished >= 2: 
             sub_grid_for_col_check = grid_guess[n_accomplished-2 : n_accomplished+1, :]
-            if has_three_in_row(sub_grid_for_col_check.T):
+            if is_there_a_column_of_three_same(sub_grid_for_col_check):
                 continue
         
         # Check for too many of one color in any column
@@ -150,9 +152,7 @@ def solve(grid: np.ndarray, valid_rows: List[np.ndarray],
         if excess_color_in_col:
             continue
             
-        # Duplicate column check (only if grid is full)
-        # Original condition: further_testing_required = n_accomplished == n_goal - 2
-        # And then: if len(set(map(tuple,grid_guess.T.astype(int)))) < n_goal:
+        # Duplicate column check (only if grid is almost full)
         if n_accomplished == n_goal - 1: 
             # Convert columns to tuples and put in a set to count unique columns
             temp_cols_as_tuples = set()
@@ -168,3 +168,25 @@ def solve(grid: np.ndarray, valid_rows: List[np.ndarray],
              return solution
 
     return np.empty((0,0), dtype=np.int64) # Return empty if no solution from this path
+
+
+def generate_completed_board(n: int) -> np.ndarray:
+    valid_rows = list(np.random.permutation(generate_valid_rows(n))) # generate_valid_rows is now imported
+    initial_grid = np.zeros((n,n), dtype=int)
+    initial_grid[0] = valid_rows.pop()
+    solution = solve(grid=initial_grid,
+                      valid_rows=valid_rows,
+                      n_accomplished=1,
+                      n_goal=n)
+    if solution.shape == (n,n):
+        return solution
+    else:
+        return generate_completed_board(n)
+
+
+if __name__ == "__main__":
+    # print(has_three_in_row([0,1,1,0,1,0,1,0,0,0]))
+    # print("Valid rows of length 6")
+    # for row in generate_valid_rows(6):
+    #     print(row.astype(int))
+    print(generate_completed_board(n=4))

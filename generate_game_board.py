@@ -1,5 +1,5 @@
 import numpy as np
-from _generate_completed_board import generate_completed_board
+from generate_full_board import generate_completed_board
 from check_unique import check_unique
 from numba import njit
 
