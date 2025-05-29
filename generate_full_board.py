@@ -13,10 +13,19 @@ def vec_has_three_in_row(arr_input: np.ndarray) -> bool:
     """
     if len(arr_input) < 3:
         return False
-    for i in range(len(arr_input) - 2):
-        val = arr_input[i]
-        if val != 0 and val == arr_input[i+1] and val == arr_input[i+2]:
-            return True
+    counter = 0
+    last_seen_value = 0
+    for val in arr_input.flat:
+        if val == 0:
+            counter = 0
+            continue
+        elif val == last_seen_value:
+            counter += 1
+            if counter == 3:
+                return True
+        else:
+            last_seen_value = val
+            counter = 1
     return False
 
 @njit # has_three_in_row remains JITted
@@ -186,7 +195,9 @@ def generate_completed_board(n: int) -> np.ndarray:
 
 if __name__ == "__main__":
     # print(has_three_in_row([0,1,1,0,1,0,1,0,0,0]))
-    # print("Valid rows of length 6")
+    for n in range(2,7):
+        print(f"Number of valid rows of length {2*n}: {len(generate_valid_rows(2*n))}")
     # for row in generate_valid_rows(6):
-    #     print(row.astype(int))
-    print(generate_completed_board(n=4))
+    #     print(row-1)
+    for i in range(3):
+        print(generate_completed_board(n=10)-1)
