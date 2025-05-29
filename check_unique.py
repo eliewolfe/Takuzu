@@ -1,5 +1,6 @@
 import numpy as np
 from numba import njit
+from generate_full_board import vec_has_three_in_row
 
 @njit
 def check_unique(board: np.array, position: tuple) -> bool:
@@ -55,21 +56,11 @@ def check_unique(board: np.array, position: tuple) -> bool:
     new_color = 3 - true_color
     bad_board[x,y] = new_color
 
-    # Refactored three-in-a-row check for the affected row
-    # Check row bad_board[x,:]
-    for i in range(n - 2):
-        if bad_board[x, i] == new_color and \
-           bad_board[x, i+1] == new_color and \
-           bad_board[x, i+2] == new_color:
-            return True # Made unique by leading to 3-in-a-row
-
-    # Refactored three-in-a-row check for the affected column
-    # Check column bad_board[:,y]
-    for i in range(n - 2):
-        if bad_board[i, y] == new_color and \
-           bad_board[i+1, y] == new_color and \
-           bad_board[i+2, y] == new_color:
-            return True # Made unique by leading to 3-in-a-row
+    # Check for 3 in a row or 3 in a column
+    if vec_has_three_in_row(bad_board[x-2:x+2, y]):
+        return True # Made unique by leading to 3-in-a-row
+    if vec_has_three_in_row(bad_board[x, y-2:y+2]):
+        return True # Made unique by leading to 3-in-a-column
 
     # Check too many new_color or duplicate row for the affected row bad_board[x,:]
     current_row_slice = bad_board[x,:]
