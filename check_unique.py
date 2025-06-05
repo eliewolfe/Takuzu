@@ -1,9 +1,33 @@
 import numpy as np
-from numba import njit
+from numba import njit, bool_, uint8, int_
 from generate_full_board import vec_has_three_in_row
 
-@njit
-def check_unique(board: np.array, position: tuple) -> bool:
+@njit(bool_(uint8[:,:], int_, int_), cache=True)
+def rules_2_and_3_check_on_row_for_specific_color(board: np.ndarray, x: int, color: int) -> bool:
+    n = board.shape[1]
+    max_colors_val = n // 2
+    where_color = (board[x] == color)
+    color_count = np.count_nonzero(where_color)
+    if color_count > max_colors_val:
+        return False
+    elif color_count < max_colors_val:
+        return True
+    for k in range(n):
+        if k == x:
+            continue
+        if np.all(board[k,where_color] == color):
+            return False
+    return True
+
+@njit(bool_(uint8[:,:], int_), cache=True)
+def rules_2_and_3_check_on_row_for_both_colors(board: np.ndarray, x: int) -> bool:
+    return (rules_2_and_3_check_on_row_for_specific_color(board, x, 1) and
+            rules_2_and_3_check_on_row_for_specific_color(board, x, 2))
+
+
+
+@njit(bool_(uint8[:,:], int_, int_), cache=True)
+def check_unique(board: np.array, x: int, y: int) -> bool:
     """
     Checks if emptying a cell at a given position on the board is a "forced move"
     or would lead to a rule violation if the cell's original color were flipped.
@@ -17,8 +41,8 @@ def check_unique(board: np.array, position: tuple) -> bool:
     Args:
         board (np.array): The current state of the game board (n x n).
                           Expected to contain 0s (empty), 1s, and 2s.
-        position (tuple): A tuple (row, col) indicating the cell to check.
-                          The cell at board[row, col] must not be 0.
+        x:                Row index of cell to check.
+        y:                Column index of cell to check.
 
     Returns:
         bool: True if flipping the color at `position` would violate a rule
@@ -27,31 +51,16 @@ def check_unique(board: np.array, position: tuple) -> bool:
               False if flipping the color does not immediately violate basic rules,
               meaning the cell's original value isn't immediately forced by this check.
     """
-    (n, m) = board.shape
-    # assert n == m, "Board must be square." # Numba doesn't like asserts with tuples in string formatting
-    if n != m:
-        # Numba compatible way to raise error or handle
-        # For now, assume square board as per original logic, or let it fail if not.
-        # Or, return a specific value indicating error, e.g., raise ValueError("Board must be square")
-        # However, Numba might not support raising ValueError with custom strings easily.
-        # For simplicity in JIT, this check might be better done outside or handled carefully.
-        # Let's assume valid square boards are passed.
-        pass
 
     bad_board = board.copy()
-    x, y = position[0], position[1] # Unpack tuple for Numba
     true_color = bad_board[x,y]
 
-    if true_color == 0:
-        return False
-    
+    # # true color is never 0
+    # if true_color == 0:
+    #     return False
+
+    # Numba does not like assertions
     # assert true_color in {1,2}, "Sanity check failed, grid not 0/1/2 valued."
-    # Replace assert with a check Numba can handle:
-    if not (true_color == 1 or true_color == 2):
-        # Handle error or assume valid values. Numba doesn't JIT arbitrary string messages in asserts/exceptions.
-        # This indicates a logic error upstream if hit.
-        # For now, assume valid inputs.
-        pass
 
     new_color = 3 - true_color
     bad_board[x,y] = new_color
@@ -62,54 +71,9 @@ def check_unique(board: np.array, position: tuple) -> bool:
     if vec_has_three_in_row(bad_board[x, y-2:y+2]):
         return True # Made unique by leading to 3-in-a-column
 
-    # Check too many new_color or duplicate row for the affected row bad_board[x,:]
-    current_row_slice = bad_board[x,:]
-    num_new_color_in_row = 0
-    for val in current_row_slice:
-        if val == new_color:
-            num_new_color_in_row += 1
-    
-    if num_new_color_in_row > n / 2:
-        return True # Leads to excess new_color in the row
-    
-    if num_new_color_in_row == n / 2:
-        # Check for duplicate rows if this row is now full of new_color for its quota
-        # This means comparing bad_board[x,:] with other rows bad_board[k,:] where k != x
-        for k in range(n):
-            if k == x:
-                continue
-            # Check if bad_board[k,:] is identical to bad_board[x,:]
-            is_duplicate_row = True
-            for col_idx in range(n):
-                if bad_board[x, col_idx] != bad_board[k, col_idx]:
-                    is_duplicate_row = False
-                    break
-            if is_duplicate_row:
-                return True # Duplicate row found
-
-    # Check too many new_color or duplicate column for the affected column bad_board[:,y]
-    current_col_slice = bad_board[:,y]
-    num_new_color_in_col = 0
-    for val in current_col_slice:
-        if val == new_color:
-            num_new_color_in_col += 1
-
-    if num_new_color_in_col > n / 2:
-        return True # Leads to excess new_color in the column
-
-    if num_new_color_in_col == n / 2:
-        # Check for duplicate columns if this col is now full of new_color for its quota
-        # This means comparing bad_board[:,y] with other columns bad_board[:,k] where k != y
-        for k in range(n):
-            if k == y:
-                continue
-            # Check if bad_board[:,y] is identical to bad_board[:,k]
-            is_duplicate_col = True
-            for row_idx in range(n):
-                if bad_board[row_idx, y] != bad_board[row_idx, k]:
-                    is_duplicate_col = False
-                    break
-            if is_duplicate_col:
-                return True # Duplicate column found
+    if not rules_2_and_3_check_on_row_for_both_colors(bad_board, x):
+        return True
+    if not rules_2_and_3_check_on_row_for_both_colors(bad_board.T, y):
+        return True
                 
     return False

@@ -1,9 +1,9 @@
 import numpy as np
 from generate_full_board import generate_completed_board
 from check_unique import check_unique
-from numba import njit
 
-@njit
+
+# Numba cache not functional for recursive functions.
 def create_emptier_board(partial_board: np.array) -> np.array:
     """
     Recursively removes cells from a completed or partially filled game board
@@ -36,20 +36,16 @@ def create_emptier_board(partial_board: np.array) -> np.array:
     # This is Numba-compatible.
     if coords.shape[0] == 0: # No non-zero elements to remove
         return partial_board
-    np.random.shuffle(coords)
+    np.random.default_rng().shuffle(coords)
 
     for i in range(coords.shape[0]):
-        x, y = coords[i, 0], coords[i, 1]
-        
-        # Pass coordinates as a tuple to check_unique, as it expects.
-        # Numba can handle creating small tuples.
-        position_tuple = (x, y)
-        
-        if check_unique(partial_board, position_tuple): # check_unique is already JITted
-            new_board = partial_board.copy()
-            new_board[x,y] = 0
+        xy = coords[i]
+        x = int(xy[0])
+        y = int(xy[1])
+        if check_unique(partial_board, x, y): # check_unique is already JITted
+            partial_board[x,y] = 0
             # Recursive call to a JITted function is fine.
-            return create_emptier_board(new_board)
+            return create_emptier_board(partial_board)
             
     return partial_board
 

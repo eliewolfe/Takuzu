@@ -2,10 +2,10 @@ import numpy as np
 from typing import List # For type hints
 import functools # For @functools.cache
 import itertools # For itertools.combinations
-from numba import njit
+from numba import njit, uint8, bool_, int_
 
 
-@njit # has_three_in_row remains JITted
+@njit(bool_(uint8[:]), cache=True)
 def vec_has_three_in_row(arr_input: np.ndarray) -> bool:
     """
     Check if array contains three consecutive identical non-zero values.
@@ -28,23 +28,9 @@ def vec_has_three_in_row(arr_input: np.ndarray) -> bool:
             counter = 1
     return False
 
-@njit # has_three_in_row remains JITted
-def is_there_a_column_of_three_same(arr_input: np.ndarray) -> bool:
-    """
-    2D array (checks each row, assuming rows are the segments to check, e.g., column segments of length 3).
-    arr_input is expected to be np.int64
-    """
-    for i in range(arr_input.shape[1]):
-        if arr_input.shape[0] != 3:
-            continue
-        val = arr_input[0, i]
-        if val != 0 and val == arr_input[1, i] and val == arr_input[2, i]:
-            return True
-    return False
 
-# --- Reverted Combination Generation & valid_rows to Pure Python ---
-@functools.cache # Reinstate functools.cache
-def generate_valid_rows(n: int) -> List[np.ndarray]: 
+@functools.cache  # caching better than njitting.
+def generate_valid_rows(n: int) -> List[np.ndarray]:
     """
     Generates all valid rows for a square binary puzzle board of size 'n'.
 
@@ -68,8 +54,8 @@ def generate_valid_rows(n: int) -> List[np.ndarray]:
                           implies 0s and 1s).
     """
     valid_rows: List[np.ndarray] = []
-    
-    if n % 2 != 0: # Original assert implies n must be even
+
+    if n % 2 != 0:  # Original assert implies n must be even
         raise ValueError("n must be a multiple of 2")
         # return valid_rows # Return empty list for consistency if n is odd
 
@@ -81,12 +67,49 @@ def generate_valid_rows(n: int) -> List[np.ndarray]:
         candidate_row = blank_row_template.copy()
         # ones_pos is a tuple of indices, convert to list for assignment
         candidate_row[list(ones_pos)] = 2
-        
+
         # has_three_in_row expects an int array
         if not vec_has_three_in_row(candidate_row):
-            valid_rows.append(candidate_row) # Store as uint8 arrays
-            
+            valid_rows.append(candidate_row)  # Store as uint8 arrays
+
     return valid_rows
+
+@njit(bool_(uint8[:,:]), cache=True) # has_three_in_row remains JITted
+def any_vec_has_last_three_in_row(arr_input: np.ndarray) -> bool:
+    """
+    2D array (checks each row, assuming rows are the segments to check, e.g., column segments of length 3).
+    arr_input is expected to be np.int64
+    """
+    for (x,y,z) in arr_input[:,-3:]:
+        if x != 0 and x == y == z:
+            return True
+    return False
+
+@njit(bool_(uint8[:], int_), cache=True)
+def vec_content_exceeds_limit(arr_input: np.ndarray, limit: int) -> bool:
+    """
+    Check if array contains more 1s or more 2s than the limit
+    """
+    if len(arr_input) < limit:
+        return False
+    ones_counter = 0
+    twos_counter = 0
+    for val in arr_input.flat:
+        if val == 0:
+            continue
+        ones_counter += 2 - val  # increments by one only if val==1
+        twos_counter += val - 1 # increments by one only if val==2
+        if (ones_counter > limit) or (twos_counter > limit):
+            return True
+    return False
+
+@njit(bool_(uint8[:,:], int_), cache=True)
+def any_vec_content_exceeds_limit(arr_input: np.ndarray, limit: int) -> bool:
+    for vec in arr_input:
+        if vec_content_exceeds_limit(vec, limit):
+            return True
+    return False
+
 
 # --- Reverted solve to Pure Python ---
 def solve(grid: np.ndarray, valid_rows: List[np.ndarray], 
@@ -118,70 +141,44 @@ def solve(grid: np.ndarray, valid_rows: List[np.ndarray],
     if n_accomplished == n_goal:
         return grid # Successfully filled the grid
     
-    # Original logic for checking existing rows in the grid
-    grid_as_set_of_tuples = set(map(tuple, grid[:n_accomplished].tolist()))
-
+    # No need to ever check for duplicate rows, impossible by construction.
+    max_colors_val = n_goal // 2
     for i in range(len(valid_rows)): 
         current_row_to_try = valid_rows[i] # This is a 1D NumPy array
-        
-        # Check if current_row_to_try (as a tuple) is already in the set of existing rows
-        if tuple(current_row_to_try) in grid_as_set_of_tuples:
-            continue
-
-        grid_guess = grid.copy()
-        grid_guess[n_accomplished, :] = current_row_to_try
-        
-        # Original logic for remaining_rows (Python list slicing and concatenation)
         remaining_rows = valid_rows[:i] + valid_rows[i+1:]
-            
+        grid[n_accomplished] = current_row_to_try
+        subgrid_for_checking = grid[: n_accomplished + 1].T
+
         # Check 3-in-a-row for columns if enough rows are placed
-        if n_accomplished >= 2: 
-            sub_grid_for_col_check = grid_guess[n_accomplished-2 : n_accomplished+1, :]
-            if is_there_a_column_of_three_same(sub_grid_for_col_check):
-                continue
+        if n_accomplished < 2:
+            pass
+        elif any_vec_has_last_three_in_row(subgrid_for_checking):
+            continue
         
         # Check for too many of one color in any column
-        # Original condition: further_testing_required = 2*(n_accomplished+2)//3 >= n_goal/2
-        # This was a heuristic. A direct check is more robust.
-        # Let's use the more direct check developed during Numba refactoring.
-        max_colors_val = n_goal // 2
-        excess_color_in_col = False
-        for col_idx in range(n_goal):
-            col_sum_color1 = 0
-            col_sum_color2 = 0
-            for row_idx in range(n_accomplished + 1): # Include the newly placed row
-                val = grid_guess[row_idx, col_idx]
-                if val == 1:
-                    col_sum_color1 += 1
-                elif val == 2: 
-                    col_sum_color2 += 1
-            if col_sum_color1 > max_colors_val or col_sum_color2 > max_colors_val:
-                excess_color_in_col = True
-                break
-        if excess_color_in_col:
+        if 2*(n_accomplished+2)//3 < n_goal/2:
+            pass
+        elif any_vec_content_exceeds_limit(subgrid_for_checking, max_colors_val):
             continue
             
         # Duplicate column check (only if grid is almost full)
         if n_accomplished == n_goal - 1: 
             # Convert columns to tuples and put in a set to count unique columns
-            temp_cols_as_tuples = set()
-            for col_idx in range(n_goal):
-                temp_cols_as_tuples.add(tuple(grid_guess[:, col_idx]))
-            
+            temp_cols_as_tuples = set(map(tuple, subgrid_for_checking.tolist()))
             if len(temp_cols_as_tuples) < n_goal:
                 continue # Duplicate column detected
 
+        # If we get to this point in the code, row addition has been successful.
         # Recursive call
-        solution = solve(grid_guess, remaining_rows, n_accomplished + 1, n_goal)
-        if solution.shape[0] == n_goal and solution.shape[1] == n_goal: 
-             return solution
-
-    return np.empty((0,0), dtype=np.int64) # Return empty if no solution from this path
+        return solve(grid, remaining_rows, n_accomplished + 1, n_goal)
+    # Exiting the loop with n_accomplished not equalling n_goal means all valid rows have been explored and eliminated
+    # and thus the construction failed. Returning an empty grid to signify restart from scratch required.
+    return np.empty((0,0), dtype=np.uint8) # Return empty if no solution from this path
 
 
 def generate_completed_board(n: int) -> np.ndarray:
-    valid_rows = list(np.random.permutation(generate_valid_rows(n))) # generate_valid_rows is now imported
-    initial_grid = np.zeros((n,n), dtype=int)
+    valid_rows = list(np.random.default_rng().permutation(generate_valid_rows(n))) # generate_valid_rows is now imported
+    initial_grid = np.zeros((n,n), dtype=np.uint8)
     initial_grid[0] = valid_rows.pop()
     solution = solve(grid=initial_grid,
                       valid_rows=valid_rows,
