@@ -1,6 +1,6 @@
 import numpy as np
 from numba import njit, bool_, uint8, int_
-from generate_full_board import vec_has_three_in_row
+from generate_full_board import vec_has_three_in_row, generate_completed_board
 
 @njit(bool_(uint8[:,:], int_, int_), cache=True)
 def rules_2_and_3_check_on_row_for_specific_color(board: np.ndarray, x: int, color: int) -> bool:
@@ -25,55 +25,57 @@ def rules_2_and_3_check_on_row_for_both_colors(board: np.ndarray, x: int) -> boo
             rules_2_and_3_check_on_row_for_specific_color(board, x, 2))
 
 
+@njit(uint8[:,:](uint8[:,:]), cache=False)
+def _generate_game_board(full_board: np.ndarray) -> np.ndarray:
+    d = full_board.shape[1]
+    n_elements = full_board.size
+    flat_coords = np.arange(n_elements)
+    np.random.shuffle(flat_coords)
+    xs, ys = np.divmod(flat_coords, d)
+    partial_board = full_board.copy()
+    i=0
 
-@njit(bool_(uint8[:,:], int_, int_), cache=True)
-def check_unique(board: np.array, x: int, y: int) -> bool:
-    """
-    Checks if emptying a cell at a given position on the board is a "forced move"
-    or would lead to a rule violation if the cell's original color were flipped.
+    while i < n_elements:
+        x = xs[i]
+        y = ys[i]
+        i += 1
+        true_color = partial_board[x, y]
+        if not true_color:
+            continue
+        new_color = 3 - true_color
+        partial_board[x, y] = new_color
 
-    This function is used to determine if a cell can be emptied when generating
-    a puzzle. If flipping the cell's color (1 to 2 or 2 to 1) would violate
-    a board rule (like three in a row, too many of one color, or duplicate row/column),
-    then the original color is considered "unique" or "forced" for that cell's
-    solution, implying that emptying it is a valid puzzle generation step.
+        if (not rules_2_and_3_check_on_row_for_both_colors(partial_board, x)
+            or not rules_2_and_3_check_on_row_for_both_colors(partial_board.T, y)
+            or vec_has_three_in_row(partial_board[x - 2:x + 2, y])
+            or vec_has_three_in_row(partial_board[x, y - 2:y + 2])):
+            partial_board[x, y] = 0
+            i = 0
+            continue
+        else:
+            partial_board[x, y] = true_color
 
-    Args:
-        board (np.array): The current state of the game board (n x n).
-                          Expected to contain 0s (empty), 1s, and 2s.
-        x:                Row index of cell to check.
-        y:                Column index of cell to check.
+    return partial_board
 
-    Returns:
-        bool: True if flipping the color at `position` would violate a rule
-              (making the original color necessary for a unique solution from this state,
-              or if emptying it is "forced" because the alternative is invalid).
-              False if flipping the color does not immediately violate basic rules,
-              meaning the cell's original value isn't immediately forced by this check.
-    """
 
-    bad_board = board.copy()
-    true_color = bad_board[x,y]
+def filled_fraction(partial_board: np.array) -> float:
+    return np.divide(np.count_nonzero(partial_board), partial_board.size)
 
-    # # true color is never 0
-    # if true_color == 0:
-    #     return False
+def generate_game_board(n: int) -> np.array:
+    completed_board = generate_completed_board(n)
+    candidate_board = np.ones((1,1), dtype=np.uint8)
+    i = 0
+    while True:
+        if filled_fraction(candidate_board) <= 0.45:
+            print(f"Phew, that took {i} tries!")
+            return candidate_board
+        candidate_board = _generate_game_board(completed_board)
+        i += 1
 
-    # Numba does not like assertions
-    # assert true_color in {1,2}, "Sanity check failed, grid not 0/1/2 valued."
-
-    new_color = 3 - true_color
-    bad_board[x,y] = new_color
-
-    # Check for 3 in a row or 3 in a column
-    if vec_has_three_in_row(bad_board[x-2:x+2, y]):
-        return True # Made unique by leading to 3-in-a-row
-    if vec_has_three_in_row(bad_board[x, y-2:y+2]):
-        return True # Made unique by leading to 3-in-a-column
-
-    if not rules_2_and_3_check_on_row_for_both_colors(bad_board, x):
-        return True
-    if not rules_2_and_3_check_on_row_for_both_colors(bad_board.T, y):
-        return True
-                
-    return False
+if __name__ == "__main__":
+    print(generate_game_board(4))
+    print(generate_game_board(6))
+    print(generate_game_board(8))
+    print(generate_game_board(12))
+    # average_filled_fraction = list(filled_fraction(generate_game_board(10)) for _ in range(10))
+    # print("Average filled fraction: {}".format(average_filled_fraction))

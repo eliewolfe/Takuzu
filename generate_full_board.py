@@ -16,7 +16,7 @@ def vec_has_three_in_row(arr_input: np.ndarray) -> bool:
     counter = 0
     last_seen_value = 0
     for val in arr_input.flat:
-        if val == 0:
+        if val == 0: # blank tile, reset counter
             counter = 0
             continue
         elif val == last_seen_value:
