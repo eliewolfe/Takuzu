@@ -74,17 +74,17 @@ def filled_fraction(partial_board: np.array) -> float:
 
 
 def generate_game_board(n: int) -> np.array:
-    completed_board = generate_completed_board(n)
-    return _generate_game_board(completed_board)
-    # candidate_board = np.ones((1, 1), dtype=np.uint8)
-    # i = 0
-    # while True:
-    #     if filled_fraction(candidate_board) <= 0.2:
-    #         print(f"Phew, that took {i} tries!")
-    #         return candidate_board
-    #     completed_board = generate_completed_board(n)  # Entirely new filled solution, as this makes a difference!
-    #     candidate_board = _generate_game_board(completed_board)
-    #     i += 1
+    # completed_board = generate_completed_board(n)
+    # return _generate_game_board(completed_board)
+    candidate_board = np.ones((1, 1), dtype=np.uint8)
+    i = 0
+    while True:
+        if filled_fraction(candidate_board) <= 1/3:
+            print(f"Phew, that took {i} tries!")
+            return candidate_board
+        completed_board = generate_completed_board(n)  # Entirely new filled solution, as this makes a difference!
+        candidate_board = _generate_game_board(completed_board)
+        i += 1
 
 
 if __name__ == "__main__":
@@ -93,5 +93,5 @@ if __name__ == "__main__":
     print(generate_game_board(8))
     print(generate_game_board(10))
     print(generate_game_board(12))
-    average_filled_fraction = sum(filled_fraction(generate_game_board(8)) for _ in range(100))
+    average_filled_fraction = list(filled_fraction(generate_game_board(10)) for _ in range(100))
     print("Average filled fraction: {}".format(average_filled_fraction))

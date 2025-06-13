@@ -116,16 +116,16 @@ def filled_fraction(partial_board: np.array) -> float:
 
 
 def generate_game_board(n: int) -> np.array:
-    return _generate_game_board(generate_completed_board(n))
-    # completed_board = generate_completed_board(n)
-    # candidate_board = np.ones((1,1), dtype=np.uint8)
-    # i = 0
-    # while True:
-    #     if filled_fraction(candidate_board) <= 0.45:
-    #         print(f"Phew, that took {i} tries!")
-    #         return candidate_board
-    #     candidate_board = _generate_game_board(completed_board)
-    #     i += 1
+    # return _generate_game_board(generate_completed_board(n))
+    candidate_board = np.ones((1,1), dtype=np.uint8)
+    i = 0
+    while True:
+        if filled_fraction(candidate_board) <= 1/3:
+            print(f"Phew, that took {i} tries!")
+            return candidate_board
+        completed_board = generate_completed_board(n)
+        candidate_board = _generate_game_board(completed_board)
+        i += 1
 
 
 if __name__ == "__main__":
