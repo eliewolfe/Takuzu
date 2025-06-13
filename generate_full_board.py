@@ -1,7 +1,7 @@
 import numpy as np
-from typing import List # For type hints
-import functools # For @functools.cache
-import itertools # For itertools.combinations
+from typing import List  # For type hints
+import functools  # For @functools.cache
+import itertools  # For itertools.combinations
 from numba import njit, uint8, bool_, int_
 
 
@@ -16,7 +16,7 @@ def vec_has_three_in_row(arr_input: np.ndarray) -> bool:
     counter = 0
     last_seen_value = 0
     for val in arr_input.flat:
-        if val == 0: # blank tile, reset counter
+        if val == 0:  # blank tile, reset counter
             counter = 0
             continue
         elif val == last_seen_value:
@@ -74,16 +74,18 @@ def generate_valid_rows(n: int) -> List[np.ndarray]:
 
     return valid_rows
 
-@njit(bool_(uint8[:,:]), cache=True) # has_three_in_row remains JITted
+
+@njit(bool_(uint8[:, :]), cache=True)  # has_three_in_row remains JITted
 def any_vec_has_last_three_in_row(arr_input: np.ndarray) -> bool:
     """
     2D array (checks each row, assuming rows are the segments to check, e.g., column segments of length 3).
     arr_input is expected to be np.int64
     """
-    for (x,y,z) in arr_input[:,-3:]:
+    for (x, y, z) in arr_input[:, -3:]:
         if x != 0 and x == y == z:
             return True
     return False
+
 
 @njit(bool_(uint8[:], int_), cache=True)
 def vec_content_exceeds_limit(arr_input: np.ndarray, limit: int) -> bool:
@@ -98,12 +100,13 @@ def vec_content_exceeds_limit(arr_input: np.ndarray, limit: int) -> bool:
         if val == 0:
             continue
         ones_counter += 2 - val  # increments by one only if val==1
-        twos_counter += val - 1 # increments by one only if val==2
+        twos_counter += val - 1  # increments by one only if val==2
         if (ones_counter > limit) or (twos_counter > limit):
             return True
     return False
 
-@njit(bool_(uint8[:,:], int_), cache=True)
+
+@njit(bool_(uint8[:, :], int_), cache=True)
 def any_vec_content_exceeds_limit(arr_input: np.ndarray, limit: int) -> bool:
     for vec in arr_input:
         if vec_content_exceeds_limit(vec, limit):
@@ -112,7 +115,7 @@ def any_vec_content_exceeds_limit(arr_input: np.ndarray, limit: int) -> bool:
 
 
 # --- Reverted solve to Pure Python ---
-def solve(grid: np.ndarray, valid_rows: List[np.ndarray], 
+def solve(grid: np.ndarray, valid_rows: List[np.ndarray],
           n_accomplished: int, n_goal: int) -> np.ndarray:
     """
     Recursively attempts to solve or complete a binary puzzle board using backtracking.
@@ -139,13 +142,13 @@ def solve(grid: np.ndarray, valid_rows: List[np.ndarray],
                     it returns an empty 2D NumPy array (shape (0,0)).
     """
     if n_accomplished == n_goal:
-        return grid # Successfully filled the grid
-    
+        return grid  # Successfully filled the grid
+
     # No need to ever check for duplicate rows, impossible by construction.
     max_colors_val = n_goal // 2
-    for i in range(len(valid_rows)): 
-        current_row_to_try = valid_rows[i] # This is a 1D NumPy array
-        remaining_rows = valid_rows[:i] + valid_rows[i+1:]
+    for i in range(len(valid_rows)):
+        current_row_to_try = valid_rows[i]  # This is a 1D NumPy array
+        remaining_rows = valid_rows[:i] + valid_rows[i + 1:]
         grid[n_accomplished] = current_row_to_try
         subgrid_for_checking = grid[: n_accomplished + 1].T
 
@@ -154,37 +157,38 @@ def solve(grid: np.ndarray, valid_rows: List[np.ndarray],
             pass
         elif any_vec_has_last_three_in_row(subgrid_for_checking):
             continue
-        
+
         # Check for too many of one color in any column
-        if 2*(n_accomplished+2)//3 < n_goal/2:
+        if 2 * (n_accomplished + 2) // 3 < n_goal / 2:
             pass
         elif any_vec_content_exceeds_limit(subgrid_for_checking, max_colors_val):
             continue
-            
+
         # Duplicate column check (only if grid is almost full)
-        if n_accomplished == n_goal - 1: 
+        if n_accomplished == n_goal - 1:
             # Convert columns to tuples and put in a set to count unique columns
             temp_cols_as_tuples = set(map(tuple, subgrid_for_checking.tolist()))
             if len(temp_cols_as_tuples) < n_goal:
-                continue # Duplicate column detected
+                continue  # Duplicate column detected
 
         # If we get to this point in the code, row addition has been successful.
         # Recursive call
         return solve(grid, remaining_rows, n_accomplished + 1, n_goal)
     # Exiting the loop with n_accomplished not equalling n_goal means all valid rows have been explored and eliminated
     # and thus the construction failed. Returning an empty grid to signify restart from scratch required.
-    return np.empty((0,0), dtype=np.uint8) # Return empty if no solution from this path
+    return np.empty((0, 0), dtype=np.uint8)  # Return empty if no solution from this path
 
 
 def generate_completed_board(n: int) -> np.ndarray:
-    valid_rows = list(np.random.default_rng().permutation(generate_valid_rows(n))) # generate_valid_rows is now imported
-    initial_grid = np.zeros((n,n), dtype=np.uint8)
+    valid_rows = list(np.random.default_rng().permutation(
+        generate_valid_rows(n)))  # generate_valid_rows is now imported
+    initial_grid = np.zeros((n, n), dtype=np.uint8)
     initial_grid[0] = valid_rows.pop()
     solution = solve(grid=initial_grid,
-                      valid_rows=valid_rows,
-                      n_accomplished=1,
-                      n_goal=n)
-    if solution.shape == (n,n):
+                     valid_rows=valid_rows,
+                     n_accomplished=1,
+                     n_goal=n)
+    if solution.shape == (n, n):
         return solution
     else:
         return generate_completed_board(n)
@@ -192,9 +196,9 @@ def generate_completed_board(n: int) -> np.ndarray:
 
 if __name__ == "__main__":
     # print(has_three_in_row([0,1,1,0,1,0,1,0,0,0]))
-    for n in range(2,7):
-        print(f"Number of valid rows of length {2*n}: {len(generate_valid_rows(2*n))}")
+    for n in range(2, 7):
+        print(f"Number of valid rows of length {2 * n}: {len(generate_valid_rows(2 * n))}")
     # for row in generate_valid_rows(6):
     #     print(row-1)
     for i in range(3):
-        print(generate_completed_board(n=10)-1)
+        print(generate_completed_board(n=10) - 1)
