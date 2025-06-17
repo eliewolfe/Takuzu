@@ -49,22 +49,20 @@ def rules_count(board: np.ndarray, x: int, y: int) -> uint8:
     if color_count_in_column > max_colors_val_for_column:
         rules_violated += 1
 
-    if color_count_in_row <= max_colors_val_for_row:
-        if where_color_in_row[x-2] and where_color_in_row[x-1]:
-            rules_violated += 1
-        elif where_color_in_row[x-1] and where_color_in_row[x+1]:
-            rules_violated += 1
-        elif where_color_in_row[x+1] and where_color_in_row[x+2]:
-            rules_violated += 1
+    if where_color_in_row[y-2] and where_color_in_row[y-1]:
+        rules_violated += 1
+    if where_color_in_row[y-1] and where_color_in_row[y+1]:
+        rules_violated += 1
+    if where_color_in_row[y+1] and where_color_in_row[y+2]:
+        rules_violated += 1
 
 
-    if color_count_in_column <= max_colors_val_for_column:
-        if where_color_in_column[y-2] and where_color_in_column[y-1]:
-            rules_violated += 1
-        elif where_color_in_column[y-1] and where_color_in_column[y+1]:
-            rules_violated += 1
-        elif where_color_in_column[y+1] and where_color_in_column[y+2]:
-            rules_violated += 1
+    if where_color_in_column[x-2] and where_color_in_column[x-1]:
+        rules_violated += 1
+    if where_color_in_column[x-1] and where_color_in_column[x+1]:
+        rules_violated += 1
+    if where_color_in_column[x+1] and where_color_in_column[x+2]:
+        rules_violated += 1
 
     if ((color_count_in_row < max_colors_val_for_row) and
         (color_count_in_column < max_colors_val_for_column)):
@@ -105,20 +103,21 @@ def _generate_game_board(board: np.ndarray) -> np.ndarray:
     d = board.shape[1]
     violations_count = reliance_scores(board)
     actual_violations = violations_count.ravel()[np.flatnonzero(violations_count)]
-    last_removed_pair = np.asarray([d // 2, d // 2])
+    # last_removed_pair = np.asarray([d // 2, d // 2])
     while actual_violations.shape[0]:
         min_violations = actual_violations.min()
         where_min_violations = np.flatnonzero(violations_count == min_violations)
-        coord_pairs = np.vstack(np.divmod(where_min_violations, d)).T
-        distances = [np.sum(np.square(np.subtract(
-            last_removed_pair,
-            coord_pair))) for coord_pair in coord_pairs]
-        max_distance = max(distances)
-        remote_min_violations = where_min_violations[np.asarray(distances) == max_distance]
-        chosen_cell = np.random.choice(remote_min_violations)
+        # coord_pairs = np.vstack(np.divmod(where_min_violations, d)).T
+        # distances = [np.sum(np.square(np.subtract(
+        #     last_removed_pair,
+        #     coord_pair))) for coord_pair in coord_pairs]
+        # max_distance = max(distances)
+        # remote_min_violations = where_min_violations[np.asarray(distances) == max_distance]
+        # chosen_cell = np.random.choice(remote_min_violations)
+        chosen_cell = np.random.choice(where_min_violations)
         last_removed_pair = np.divmod(chosen_cell, d)
         board[last_removed_pair] = 0
-        last_removed_pair = np.asarray(last_removed_pair)
+        # last_removed_pair = np.asarray(last_removed_pair)
         violations_count = reliance_scores(board)
         actual_violations = violations_count.ravel()[np.flatnonzero(violations_count)]
     return board
@@ -130,17 +129,17 @@ def filled_fraction(partial_board: np.array) -> float:
 
 
 def generate_game_board(n: int) -> np.array:
-    # completed_board = generate_completed_board(n)
-    # return _generate_game_board(completed_board)
-    candidate_board = np.ones((1, 1), dtype=np.uint8)
-    i = 0
-    while True:
-        if filled_fraction(candidate_board) <= 0.2:
-            print(f"Phew, that took {i} tries!")
-            return candidate_board
-        completed_board = generate_completed_board(n)  # Entirely new filled solution, as this makes a difference!
-        candidate_board = _generate_game_board(completed_board)
-        i += 1
+    completed_board = generate_completed_board(n)
+    return _generate_game_board(completed_board)
+    # candidate_board = np.ones((1, 1), dtype=np.uint8)
+    # i = 0
+    # while True:
+    #     if filled_fraction(candidate_board) <= 0.2:
+    #         print(f"Phew, that took {i} tries!")
+    #         return candidate_board
+    #     completed_board = generate_completed_board(n)  # Entirely new filled solution, as this makes a difference!
+    #     candidate_board = _generate_game_board(completed_board)
+    #     i += 1
 
 
 if __name__ == "__main__":
@@ -149,5 +148,5 @@ if __name__ == "__main__":
     print(generate_game_board(8))
     print(generate_game_board(10))
     print(generate_game_board(12))
-    average_filled_fraction = list(filled_fraction(generate_game_board(10)) for _ in range(100))
+    average_filled_fraction = sum(filled_fraction(generate_game_board(10)) for _ in range(100))
     print("Average filled fraction: {}".format(average_filled_fraction))
