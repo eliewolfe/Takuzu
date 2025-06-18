@@ -1,11 +1,62 @@
 import numpy as np
 from numba import njit, uint8, int_, float64, bool_
 from generate_full_board import generate_completed_board
-from generate_sparse_gameboard import rules_count
+# from generate_sparse_gameboard import reliance_scores
+
 
 @njit(bool_(uint8[:, :], int_, int_), cache=True)
 def violation_detected(board: np.ndarray, x: int, y: int) -> bool:
-    return rules_count(board, x, y) > 0
+
+    n_rows, n_columns = board.shape
+    color = board[x, y]
+    max_colors_val_for_row = n_columns // 2
+    where_color_in_row = np.asarray(board[x] == color, dtype=np.bool_)
+    color_count_in_row = np.count_nonzero(where_color_in_row)
+
+    boardT = board.T
+    max_colors_val_for_column = n_rows // 2
+    where_color_in_column = np.asarray(boardT[y] == color, dtype=np.bool_)
+    color_count_in_column = np.count_nonzero(where_color_in_column)
+
+    if color_count_in_row > max_colors_val_for_row:
+        return True
+    if color_count_in_column > max_colors_val_for_column:
+        return True
+
+
+    if y>1 and where_color_in_row[y-2] and where_color_in_row[y-1]:
+        return True
+    if min(y,n_columns-y-1)>0 and where_color_in_row[y-1] and where_color_in_row[y+1]:
+        return True
+    if n_columns>y+2 and where_color_in_row[y+1] and where_color_in_row[y+2]:
+        return True
+
+
+    if x>1 and where_color_in_column[x-2] and where_color_in_column[x-1]:
+        return True
+    if min(x,n_rows-x-1)>0 and where_color_in_column[x-1] and where_color_in_column[x+1]:
+        return True
+    if n_rows>x+2 and where_color_in_column[x+1] and where_color_in_column[x+2]:
+        return True
+
+    if ((color_count_in_row < max_colors_val_for_row) and
+        (color_count_in_column < max_colors_val_for_column)):
+        return False
+    if color_count_in_row == max_colors_val_for_row:
+        to_check = board.T[where_color_in_row].T
+        for k in range(n_rows):
+            if k == x:
+                continue
+            if np.all(to_check[k] == color):
+                return True
+    if color_count_in_column == max_colors_val_for_column:
+        to_check = board[where_color_in_column].T
+        for k in range(n_columns):
+            if k == y:
+                continue
+            if np.all(to_check[k] == color):
+                return True
+    return False
 
 @njit(bool_[:, :](uint8[:, :]), cache=True)
 def violation_locations(board: np.ndarray) -> np.ndarray:
@@ -26,7 +77,8 @@ def subsequent_violation_counts(board: np.ndarray) -> np.ndarray:
         if not true_color:
             continue
         board[x, y] = 0
-        subsequent_violation_counts[x, y] = np.count_nonzero(violation_locations(board))
+        # subsequent_violation_counts[x, y] = reliance_scores(board).sum()
+        subsequent_violation_counts[x, y] = violation_locations(board).sum()
         board[x, y] = true_color
     return subsequent_violation_counts
 
@@ -43,7 +95,9 @@ def _generate_game_board(board: np.ndarray) -> np.ndarray:
         chosen_cell = np.random.choice(where_min_next_violation)
         last_removed_pair = np.divmod(chosen_cell, d)
         board[last_removed_pair] = 0
+        last_color = np.random.randint(1,3)
         violations_places = violation_locations(board)
+        violations_places = np.logical_and(violations_places, board == last_color)
         flat_violation_locations = np.flatnonzero(violations_places)
     return board
 
@@ -73,5 +127,5 @@ if __name__ == "__main__":
     print(generate_game_board(8))
     print(generate_game_board(10))
     print(generate_game_board(12))
-    average_filled_fraction = list(filled_fraction(generate_game_board(10)) for _ in range(100))
+    average_filled_fraction = sum(filled_fraction(generate_game_board(10)) for _ in range(100))
     print("Average filled fraction: {}".format(average_filled_fraction))
