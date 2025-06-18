@@ -1,63 +1,11 @@
 import numpy as np
 from numba import njit, uint8, int_, float64, bool_
-from generate_full_board import vec_has_three_in_row, generate_completed_board
+from generate_full_board import generate_completed_board
+from generate_sparse_gameboard import rules_count
 
-@njit(uint8(uint8[:, :], int_, int_), cache=True)
-def violation_detected(board: np.ndarray, x: int, y: int) -> uint8:
-
-    n_rows, n_columns = board.shape
-
-
-    color = board[x, y]
-
-    max_colors_val_for_row = n_columns // 2
-    where_color_in_row = np.asarray(board[x] == color)
-    color_count_in_row = np.count_nonzero(where_color_in_row)
-    if color_count_in_row > max_colors_val_for_row:
-        return True
-
-    boardT = board.T
-    max_colors_val_for_column = n_rows // 2
-    where_color_in_column = np.asarray(boardT[y] == color)
-    color_count_in_column = np.count_nonzero(where_color_in_column)
-    if color_count_in_column > max_colors_val_for_column:
-        return True
-
-    if color_count_in_row <= max_colors_val_for_row:
-        if where_color_in_row[x-2] and where_color_in_row[x-1]:
-            return True
-        elif where_color_in_row[x-1] and where_color_in_row[x+1]:
-            return True
-        elif where_color_in_row[x+1] and where_color_in_row[x+2]:
-            return True
-
-
-    if color_count_in_column <= max_colors_val_for_column:
-        if where_color_in_column[y-2] and where_color_in_column[y-1]:
-            return True
-        elif where_color_in_column[y-1] and where_color_in_column[y+1]:
-            return True
-        elif where_color_in_column[y+1] and where_color_in_column[y+2]:
-            return True
-
-    if ((color_count_in_row < max_colors_val_for_row) and
-        (color_count_in_column < max_colors_val_for_column)):
-        return False
-    if color_count_in_row == max_colors_val_for_row:
-        to_check = board.T[where_color_in_row]
-        for k in range(n_rows):
-            if k == x:
-                continue
-            if np.all(to_check[k] == color):
-                return True
-    if color_count_in_column == max_colors_val_for_column:
-        to_check = board[where_color_in_column]
-        for k in range(n_columns):
-            if k == y:
-                continue
-            if np.all(to_check[k] == color):
-                return True
-    return False
+@njit(bool_(uint8[:, :], int_, int_), cache=True)
+def violation_detected(board: np.ndarray, x: int, y: int) -> bool:
+    return rules_count(board, x, y) > 0
 
 @njit(bool_[:, :](uint8[:, :]), cache=True)
 def violation_locations(board: np.ndarray) -> np.ndarray:
